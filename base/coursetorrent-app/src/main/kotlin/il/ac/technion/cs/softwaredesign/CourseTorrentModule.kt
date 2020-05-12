@@ -5,7 +5,8 @@ import dev.misfitlabs.kotlinguice4.KotlinModule
 
 class CourseTorrentModule : KotlinModule() {
     override fun configure() {
-          install(LibraryModule())
+        install(LibraryModule())
+        bind<CourseTorrent>().to<CourseTorrentImpl>()
     }
 }
 

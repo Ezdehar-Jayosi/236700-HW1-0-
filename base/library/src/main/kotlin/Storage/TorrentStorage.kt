@@ -13,8 +13,11 @@ class TorrentStorage @Inject constructor(
         torrentStorage.write(infohash.toByteArray(), Conversion.toByteArray(torrentData) as ByteArray)
 
     }
+    override fun removeTorrent(infohash:String,unloadValue:String) {
+        torrentStorage.write(infohash.toByteArray(Charsets.UTF_8), unloadValue.toByteArray(Charsets.UTF_8))
+    }
 
-    override fun getTorrentData(infohash: String): Any? {
+    override fun getTorrentData(infohash: String): ByteArray? {
         return torrentStorage.read(infohash.toByteArray())
 
     }

@@ -2,7 +2,7 @@ package Utils
 
 import java.io.Serializable
 
-object TorrentMetaData : Serializable {
+class TorrentMetaData : Serializable {
     private var info_hash: String = ""
     private var announce: List<List<String>> = mutableListOf<List<String>>()
     private var MapTorrent: Map<Any, Any>? = mutableMapOf<Any, Any>()

@@ -13,11 +13,7 @@ import il.ac.technion.cs.softwaredesign.exceptions.TrackerException
  * + Parsing torrent metainfo files (".torrent" files)
  * + Communication with trackers (announce, scrape).
  */
-class CourseTorrent @Inject constructor(
-    private val statStorage: Statistics,
-    private val userManager: Peer,
-    private val channelManager: Torrent
-) {
+interface CourseTorrent {
     /**
      * Load in the torrent metainfo file from [torrent]. The specification for these files can be found here:
      * [Metainfo File Structure](https://wiki.theory.org/index.php/BitTorrentSpecification#Metainfo_File_Structure).
@@ -30,7 +26,7 @@ class CourseTorrent @Inject constructor(
      * @throws IllegalStateException If the infohash of [torrent] is already loaded.
      * @return The infohash of the torrent, i.e., the SHA-1 of the `info` key of [torrent].
      */
-    fun load(torrent: ByteArray): String = TODO("Implement me!")
+    fun load(torrent: ByteArray): String
 
     /**
      * Remove the torrent identified by [infohash] from the system.
@@ -39,7 +35,7 @@ class CourseTorrent @Inject constructor(
      *
      * @throws IllegalArgumentException If [infohash] is not loaded.
      */
-    fun unload(infohash: String): Unit = TODO("Implement me!")
+    fun unload(infohash: String): Unit
 
     /**
      * Return the announce URLs for the loaded torrent identified by [infohash].
@@ -54,7 +50,7 @@ class CourseTorrent @Inject constructor(
      * @throws IllegalArgumentException If [infohash] is not loaded.
      * @return Tier lists of announce URLs.
      */
-    fun announces(infohash: String): List<List<String>> = TODO("Implement me!")
+    fun announces(infohash: String): List<List<String>>
 
     /**
      * Send an "announce" HTTP request to a single tracker of the torrent identified by [infohash], and update the
@@ -86,8 +82,7 @@ class CourseTorrent @Inject constructor(
      * @throws IllegalArgumentException If [infohash] is not loaded.
      * @return The interval in seconds that the client should wait before announcing again.
      */
-    fun announce(infohash: String, event: TorrentEvent, uploaded: Long, downloaded: Long, left: Long): Int =
-        TODO("Implement me!")
+    fun announce(infohash: String, event: TorrentEvent, uploaded: Long, downloaded: Long, left: Long): Int
 
     /**
      * Scrape all trackers identified by a torrent, and store the statistics provided. The specification for the scrape
@@ -100,7 +95,7 @@ class CourseTorrent @Inject constructor(
      *
      * @throws IllegalArgumentException If [infohash] is not loaded.
      */
-    fun scrape(infohash: String): Unit = TODO("Implement me!")
+    fun scrape(infohash: String): Unit
 
     /**
      * Invalidate a previously known peer for this torrent.
@@ -111,7 +106,7 @@ class CourseTorrent @Inject constructor(
      *
      * @throws IllegalArgumentException If [infohash] is not loaded.
      */
-    fun invalidatePeer(infohash: String, peer: KnownPeer): Unit = TODO("Implement me!")
+    fun invalidatePeer(infohash: String, peer: KnownPeer): Unit
 
     /**
      * Return all known peers for the torrent identified by [infohash], in sorted order. This list should contain all
@@ -126,7 +121,7 @@ class CourseTorrent @Inject constructor(
      * @throws IllegalArgumentException If [infohash] is not loaded.
      * @return Sorted list of known peers.
      */
-    fun knownPeers(infohash: String): List<KnownPeer> = TODO("Implement me!")
+    fun knownPeers(infohash: String): List<KnownPeer>
 
     /**
      * Return all known statistics from trackers of the torrent identified by [infohash]. The statistics displayed
@@ -146,5 +141,5 @@ class CourseTorrent @Inject constructor(
      * @throws IllegalArgumentException If [infohash] is not loaded.
      * @return A mapping from tracker announce URL to statistics.
      */
-    fun trackerStats(infohash: String): Map<String, ScrapeData> = TODO("Implement me!")
+    fun trackerStats(infohash: String): Map<String, ScrapeData>
 }
