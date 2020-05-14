@@ -10,6 +10,8 @@ import java.io.*
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.security.MessageDigest
+import kotlin.coroutines.coroutineContext
 
 /**
  * This is the class implementing CourseTorrent, a BitTorrent client.
@@ -23,8 +25,12 @@ class CourseTorrentImpl @Inject constructor(
     private val peerStorage: Peer,
     private val torrentStorage: Torrent
 ) : CourseTorrent {
-    private val unloaded_val = "unloaded"
-    /**
+    private val unloadedVal = "unloaded"
+    private val charList : List<Char> = ('a'..'z') + ('A'..'Z') + ('0'..'9')
+    private val randomString = (1..6)
+        .map{ _ -> kotlin.random.Random.nextInt(0,charList.size)}
+        .map(charList::get)
+        .joinToString("")    /**
      * Load in the torrent metainfo file from [torrent]. The specification for these files can be found here:
      * [Metainfo File Structure](https://wiki.theory.org/index.php/BitTorrentSpecification#Metainfo_File_Structure).
      *
@@ -37,15 +43,15 @@ class CourseTorrentImpl @Inject constructor(
      * @return The infohash of the torrent, i.e., the SHA-1 of the `info` key of [torrent].
      */
     override fun load(torrent: ByteArray): String {
-        val value = MyBencoding.DecodeObjectM(torrent)
-        val info_hash = MyBencoding.infohash(torrent)
+        val value = Bencoding.DecodeObjectM(torrent) ?: throw IllegalArgumentException()
+        val info_hash = Bencoding.infohash(torrent)
         val existing_entry = torrentStorage.getTorrentData(info_hash)
         if(existing_entry != null)
-            if(existing_entry.toString(Charsets.UTF_8) != unloaded_val)
+            if(existing_entry.toString(Charsets.UTF_8) != unloadedVal)
                 throw IllegalStateException()
         val bos = ByteArrayOutputStream()
         val oos = ObjectOutputStream(bos)
-        oos.writeObject(MyBencoding.Announce(value))
+        oos.writeObject(Bencoding.Announce(value))
         oos.flush()
         val data = bos.toByteArray()
         //TODO: initialize peer and stats storage for this torrent?
@@ -61,8 +67,8 @@ class CourseTorrentImpl @Inject constructor(
      */
     override fun unload(infohash: String): Unit {
         val previous_value = torrentStorage.getTorrentData(infohash) ?: throw IllegalArgumentException()
-        if (previous_value.toString() == unloaded_val) throw IllegalArgumentException()
-        torrentStorage.removeTorrent(infohash, unloaded_val)
+        if (previous_value.toString() == unloadedVal) throw IllegalArgumentException()
+        torrentStorage.removeTorrent(infohash, unloadedVal)
         //TODO: delete torrent from peer and stats storage too?
     }
 
@@ -81,7 +87,7 @@ class CourseTorrentImpl @Inject constructor(
      */
     override fun announces(infohash: String): List<List<String>> {
         val previous_value = torrentStorage.getTorrentData(infohash) ?: throw IllegalArgumentException()
-        if (previous_value.toString() == unloaded_val) throw IllegalArgumentException()
+        if (previous_value.toString() == unloadedVal) throw IllegalArgumentException()
         val bis = ByteArrayInputStream(previous_value)
         val inl: ObjectInput = ObjectInputStream(bis)
         val obj = inl.readObject() as List<List<String>> //TODO: use a method to extract list?
@@ -118,29 +124,56 @@ class CourseTorrentImpl @Inject constructor(
      * @return The interval in seconds that the client should wait before announcing again.
      */
     override fun announce(infohash: String, event: TorrentEvent, uploaded: Long, downloaded: Long, left: Long): Int {
-        val announce_list = announces(infohash)
         val encoding = "UTF-8"
         var request_params = URLEncoder.encode("info_hash",encoding) + "=" + URLEncoder.encode(infohash, encoding)
-        //TODO: calculate PEER ID ---
-        val peer_id = "5"
+        val IDsumHash = MessageDigest.getInstance("SHA-1").digest((315737809+313380164).toString().toByteArray())
+        val IDsumHashPart = IDsumHash
+            .map{i->"%x".format(i)}
+            .joinToString("")
+            .take(6)
+        val peer_id = "-CS1000-$IDsumHashPart$randomString"
+        val port = "6885"
         request_params += "&" + URLEncoder.encode("peer_id",encoding) +"="+URLEncoder.encode(peer_id,encoding)
-        request_params += "&" + URLEncoder.encode("port",encoding) +"="+URLEncoder.encode(peer_id,encoding)
+        request_params += "&" + URLEncoder.encode("port",encoding) +"="+URLEncoder.encode(port,encoding)
         request_params += "&" + URLEncoder.encode("uploaded",encoding) +"="+URLEncoder.encode(uploaded.toString(),encoding)
         request_params += "&" + URLEncoder.encode("downloaded",encoding) +"="+URLEncoder.encode(downloaded.toString(),encoding)
         request_params += "&" + URLEncoder.encode("left",encoding) +"="+URLEncoder.encode(left.toString(),encoding)
         request_params += "&" + URLEncoder.encode("compact",encoding) +"="+URLEncoder.encode("1",encoding)
+        request_params += "&" + URLEncoder.encode("event",encoding) +"="+URLEncoder.encode(event.toString(),encoding)
 
-        for(announce_url in announce_list) {
-           val url = URL(announce_url[0] + request_params)
-            with(url.openConnection() as HttpURLConnection) {
-                requestMethod = "GET"
+        var announce_list = announces(infohash)
+        if(event == TorrentEvent.STARTED)
+            announce_list = announce_list.map { list -> list.shuffled(kotlin.random.Random(123)) }
+        for(announce_tier in announce_list) {
+            var good_announce : String? = null
+            for (announce_url in announce_tier) {
+                val request = URL("$announce_url?$request_params")
+                with(request.openConnection() as HttpURLConnection) {
+                    requestMethod = "GET"
+                    println("URL : $url")
+                    println("Response Code : $responseCode")
 
+                    BufferedReader(InputStreamReader(inputStream)).use {
+                        val response = StringBuffer()
+
+                        var inputLine = it.readLine()
+                        while (inputLine != null) {
+                            response.append(inputLine)
+                            inputLine = it.readLine()
+                        }
+                        it.close()
+                        println("Response : $response")
+
+                        //todo: if(positive response)
+                        // good_announce= announce url
+                    }
+                }
             }
         }
-            //if (request_return = success) break
-        //else: shuffle announce list, go next
 
-        //
+
+
+        //TODO: at the end, write announce_list to torrentStorage
         return 0
     }
 
@@ -155,8 +188,41 @@ class CourseTorrentImpl @Inject constructor(
      *
      * @throws IllegalArgumentException If [infohash] is not loaded.
      */
-    override fun scrape(infohash: String): Unit = TODO("Implement me!")
+    override fun scrape(infohash: String): Unit {
 
+        val encoding = "UTF-8"
+        val requestParams = URLEncoder.encode("info_hash",encoding) + "=" + URLEncoder.encode(infohash, encoding)
+        val announceList = announces(infohash)
+        for(announce_tier in announceList) {
+            for (announce_url in announce_tier) {
+                val splitAnnounce = announce_url.split("/")
+                //TODO: do we assume every announce has a valid scrape?
+                val splitScrape = splitAnnounce.dropLast(1) + Regex("^announce").replace(splitAnnounce.last(), "scrape")
+                val scrapeUrl = splitScrape.joinToString("")
+                val request = URL("$scrapeUrl?$requestParams")
+                with(request.openConnection() as HttpURLConnection) {
+                    requestMethod = "GET"
+                    println("URL : $url")
+                    println("Response Code : $responseCode")
+
+                    BufferedReader(InputStreamReader(inputStream)).use {
+                        val response = StringBuffer()
+
+                        var inputLine = it.readLine()
+                        while (inputLine != null) {
+                            response.append(inputLine)
+                            inputLine = it.readLine()
+                        }
+                        it.close()
+                        println("Response : $response")
+
+                        //if positive todo: save scrape to system
+                    }
+                }
+            }
+        }
+
+    }
     /**
      * Invalidate a previously known peer for this torrent.
      *
