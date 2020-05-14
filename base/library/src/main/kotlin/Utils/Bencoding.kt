@@ -3,13 +3,9 @@ package Utils
 import java.security.MessageDigest
 //changed it from class to object, so we dont have a Mybencoding variable in Coursetorrent Class
 //object does not need a constructor
-object MyBencoding {
+object Bencoding {
     private var info_indx_first = -1
     private var info_indx_last = -1
-    private var infohash_raw = ""
-    private var infohash = ""
-
-    //private var announce: List<List<String>> = mutableListOf<List<String>>()
     private var flag = false
 
     /**********************************=/=Functions=\=**********************************/
@@ -18,7 +14,7 @@ object MyBencoding {
      * @param obj: Any string, integer, string or map/dictionary
      * @returns Bencoded obj as a string
      */
-    fun EncodeObject(obj: Any?): String {
+    public fun EncodeObject(obj: Any?): String {
         //clean()
         var output = StringBuilder()
         if (obj is String) {
@@ -53,21 +49,24 @@ object MyBencoding {
      * @return Pair of decoded object(Int, Str, List, Map, or null if invalid bencoding) and location to
      * continue iterating from within the object.
      */
-    fun DecodeObjectInner(obj: ByteArray, start_location: Int = 0): Pair<Any?, Int> {
-        if (start_location >= obj.size) return Pair(null, -1)
+    public fun DecodeObjectInner(obj: ByteArray, start_location: Int = 0): Pair<Any?, Int> {
+        if (start_location >= obj.size) return Pair(null, -2)
         var itr = start_location
         val ben_type: Char = obj[itr].toChar()
         itr++
         if (ben_type == 'l') { //list
             val list_out = mutableListOf<Any?>()
             while (true) {
+                if (itr >= obj.size) return Pair(null, -1)
                 val char: Char = obj[itr].toChar()
                 if (char == 'e') return Pair(list_out, itr + 1)
                 val valueItrPair = DecodeObjectInner(obj, itr)
+                if(valueItrPair.first==null) return valueItrPair
                 list_out.add(valueItrPair.first)
                 itr = valueItrPair.second
             }
         } else if (ben_type == 'i') {  //integer
+            if (itr >= obj.size) return Pair(null, -1)
             var negFlag: Boolean = false
             var sum: Int = 0
             var num: Char = obj[itr].toChar()
@@ -76,22 +75,27 @@ object MyBencoding {
                 itr++
             }
             while (true) {
+                if (itr >= obj.size) return Pair(null, -1)
                 num = obj[itr].toChar()
+                if (itr + 1 >= obj.size) return Pair(null, -1)
                 if (num == 'e') {
                     if (negFlag) return Pair(-sum, itr + 1)
                     return Pair(sum, itr + 1)
                 }
+
                 sum = (sum * 10) + (num - '0')  //check if num-'0' is working fine
                 itr++
             }
         } else if (ben_type == 'd') {//dictionary
             val dict = mutableMapOf<Any?, Any?>()
             while (true) {
+                if (itr >= obj.size) return Pair(null, -1)
                 val char: Char = obj[itr].toChar()
                 // itr++
                 if (char == 'e') return Pair(dict, itr + 1)
 
                 val keyItrPair = DecodeObjectInner(obj, itr)
+                if(keyItrPair.first==null) return keyItrPair
                 itr = keyItrPair.second
                 if (keyItrPair.first.toString() == "info") {
                     info_indx_first = itr
@@ -105,9 +109,11 @@ object MyBencoding {
                 ///infohash_raw = obj.substring(info_indx_first + 1, info_indx_last + 2)
                 dict[keyItrPair.first] = valueItrPair.first
             }
-        } else if (ben_type >= '0' || ben_type <= '9') {//string
+        } else if (ben_type - '0' >= 0 && ben_type - '9' <= 9) {//string
+            if (itr + 1 >= obj.size) return Pair(null, -1)
             var str_len = ben_type - '0'
             while (true) {
+                if (itr + 1 >= obj.size) return Pair(null, -1)
                 val char: Char = obj[itr].toChar()
                 if (char == ':') {
                     if (flag == true) {//???
@@ -143,7 +149,7 @@ object MyBencoding {
      * Use this for the reverse function of EncodeObject
      * @param obj: ByteArray of a Bencoded object
      */
-    fun DecodeObject(obj: ByteArray): Any? {
+    public fun DecodeObject(obj: ByteArray): Any? {
         return DecodeObjectInner(obj).first
 
     }
@@ -152,7 +158,7 @@ object MyBencoding {
      * Calculates the infohash of the given bencoded object
      * Requires running Bencoding.DecodeObject or Bencoding.DecodeObjectM first, to prepare the class
      */
-    fun infohash(obj: ByteArray): String {
+    public fun infohash(obj: ByteArray): String {
 
         val bytes = MessageDigest
             .getInstance("SHA-1")
@@ -169,21 +175,24 @@ object MyBencoding {
     /**
      * Decodes object as a map.
      */
-    fun DecodeObjectM(obj: ByteArray): Map<Any, Any> {
-
-        //clean()
-        val out = mutableListOf<Any?>() //TODO: change Any? to Any
+    public fun DecodeObjectM(obj: ByteArray): Map<Any, Any>? {
+        val out = mutableListOf<Any?>(); //TODO: change Any? to Any
         var itr = 0
+        var started: Boolean = false
         while (true) {
-            var o: Pair<Any?, Int> = DecodeObjectInner(obj, itr)
-            if (o.first == null) {
+            var o: Pair<Any?, Int> = DecodeObjectInner(obj, itr);
+            if (o.second == -2) {
                 //getMetaData(out.last() as Map<Any, Any>, obj)
-                return out.last() as Map<Any, Any>
+                return out.last() as Map<Any, Any>;
+            } else if (o.second == -1 && o.first == null) {
+                return null
             } else {
                 out.add(o.first)
+                //  started = true
             }
             itr = o.second
         }
+
     }
 
     /**
@@ -191,7 +200,7 @@ object MyBencoding {
      * @param obj: Dictionary representing an object with .torrent format
      * @return announce-list or announce(if -list doesn't exist) field of torrent.
      */
-    fun Announce(obj: Map<Any, Any>): List<List<String>> {
+    public fun Announce(obj: Map<Any, Any>): List<List<String>> {
         if (obj.containsKey("announce-list")) {
             return obj["announce-list"] as List<List<String>>
         } else { //if (hasList)
